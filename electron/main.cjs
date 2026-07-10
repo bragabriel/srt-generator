@@ -1,0 +1,469 @@
+const { app, BrowserWindow, dialog, ipcMain } = require('electron')
+const { spawn } = require('node:child_process')
+const fs = require('node:fs/promises')
+const os = require('node:os')
+const path = require('node:path')
+
+const MODELS_DIR = process.env.SRT_MAKER_MODELS_DIR || path.join(os.homedir(), '.rapid-edit', 'models')
+const DEFAULT_PROMPT =
+  'Redis, cache, PostgreSQL, API, request, hit, miss, banco relacional, memória RAM'
+
+function createWindow() {
+  const win = new BrowserWindow({
+    width: 1040,
+    height: 780,
+    minWidth: 880,
+    minHeight: 680,
+    title: 'SRT Maker',
+    backgroundColor: '#f7f8fa',
+    webPreferences: {
+      preload: path.join(__dirname, 'preload.cjs'),
+      contextIsolation: true,
+      nodeIntegration: false,
+    },
+  })
+
+  if (process.env.VITE_DEV_SERVER_URL) {
+    win.loadURL(process.env.VITE_DEV_SERVER_URL)
+    return
+  }
+
+  win.loadFile(path.join(__dirname, '../dist/index.html'))
+}
+
+app.whenReady().then(createWindow)
+
+app.on('window-all-closed', () => {
+  if (process.platform !== 'darwin') app.quit()
+})
+
+app.on('activate', () => {
+  if (BrowserWindow.getAllWindows().length === 0) createWindow()
+})
+
+function sendProgress(message) {
+  for (const win of BrowserWindow.getAllWindows()) {
+    win.webContents.send('srt:progress', message)
+  }
+}
+
+function run(command, args, options = {}) {
+  return new Promise((resolve, reject) => {
+    const child = spawn(command, args, { ...options, shell: false })
+    let stdout = ''
+    let stderr = ''
+
+    child.stdout.on('data', (chunk) => {
+      const text = chunk.toString()
+      stdout += text
+      if (options.progress) options.progress(text)
+    })
+
+    child.stderr.on('data', (chunk) => {
+      const text = chunk.toString()
+      stderr += text
+      if (options.progress) options.progress(text)
+    })
+
+    child.on('error', reject)
+    child.on('close', (code) => {
+      if (code === 0) {
+        resolve({ stdout, stderr })
+      } else {
+        reject(new Error(`${command} exited with code ${code}\n${stderr || stdout}`))
+      }
+    })
+  })
+}
+
+async function fileExists(filePath) {
+  try {
+    await fs.access(filePath)
+    return true
+  } catch {
+    return false
+  }
+}
+
+async function listModels() {
+  try {
+    const names = await fs.readdir(MODELS_DIR)
+    return names
+      .filter((name) => /^ggml-.*\.bin$/.test(name))
+      .sort((a, b) => Number(b.includes('small')) - Number(a.includes('small')) || a.localeCompare(b))
+      .map((name) => path.join(MODELS_DIR, name))
+  } catch {
+    return []
+  }
+}
+
+function timestampForFile() {
+  const now = new Date()
+  const pad = (value) => String(value).padStart(2, '0')
+  return [
+    now.getFullYear(),
+    pad(now.getMonth() + 1),
+    pad(now.getDate()),
+    '-',
+    pad(now.getHours()),
+    pad(now.getMinutes()),
+  ].join('')
+}
+
+function defaultOutputFor(audioPath) {
+  const parsed = path.parse(audioPath || 'audio.mp3')
+  return path.join(os.homedir(), 'Desktop', `${parsed.name}-${timestampForFile()}.srt`)
+}
+
+function parseSrtTime(value) {
+  const match = value.match(/^(\d{2}):(\d{2}):(\d{2}),(\d{3})$/)
+  if (!match) throw new Error(`Invalid SRT timestamp: ${value}`)
+  const [, h, m, s, ms] = match
+  return Number(h) * 3600 + Number(m) * 60 + Number(s) + Number(ms) / 1000
+}
+
+function formatSrtTime(seconds) {
+  const totalMs = Math.max(0, Math.round(seconds * 1000))
+  const h = Math.floor(totalMs / 3600000)
+  const m = Math.floor((totalMs % 3600000) / 60000)
+  const s = Math.floor((totalMs % 60000) / 1000)
+  const ms = totalMs % 1000
+  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')},${String(ms).padStart(3, '0')}`
+}
+
+function parseSrt(content) {
+  return content
+    .trim()
+    .split(/\n\s*\n/)
+    .map((block) => block.split(/\r?\n/).map((line) => line.trim()).filter(Boolean))
+    .filter((lines) => lines.length >= 3 && lines[1].includes('-->'))
+    .map((lines) => {
+      const [startRaw, endRaw] = lines[1].split('-->').map((part) => part.trim())
+      return {
+        start: parseSrtTime(startRaw),
+        end: parseSrtTime(endRaw),
+        text: lines.slice(2).join(' ').replace(/\s+/g, ' ').trim(),
+      }
+    })
+}
+
+function fixTerms(text) {
+  const fixes = [
+    [/\bReds\b/g, 'Redis'],
+    [/\breds\b/g, 'Redis'],
+    [/\bRedzy\b/g, 'Redis'],
+    [/\bRedzi\b/g, 'Redis'],
+    [/\bcash\b/g, 'cache'],
+    [/\bCash\b/g, 'Cache'],
+    [/consultar o API/g, 'consultar a API'],
+    [/\bdelitar\b/g, 'deletar'],
+    [/\bmilisegundos\b/g, 'milissegundos'],
+    [/\bpostgres\b/g, 'Postgres'],
+  ]
+
+  return fixes.reduce((result, [pattern, replacement]) => result.replace(pattern, replacement), text)
+}
+
+function splitText(text, maxChars) {
+  const words = text.split(/\s+/).filter(Boolean)
+  const parts = []
+  let current = ''
+
+  for (const word of words) {
+    const candidate = current ? `${current} ${word}` : word
+    if (candidate.length <= maxChars) {
+      current = candidate
+      continue
+    }
+
+    if (current) parts.push(current)
+
+    if (word.length <= maxChars) {
+      current = word
+    } else {
+      for (let index = 0; index < word.length; index += maxChars) {
+        parts.push(word.slice(index, index + maxChars))
+      }
+      current = ''
+    }
+  }
+
+  if (current) parts.push(current)
+  return parts
+}
+
+function expandSplitBlocks(blocks, maxChars) {
+  const expanded = []
+
+  for (const block of blocks) {
+    const parts = splitText(block.text, maxChars)
+    if (parts.length <= 1) {
+      expanded.push(block)
+      continue
+    }
+
+    const span = Math.max(0.001, block.end - block.start)
+    const total = parts.reduce((sum, part) => sum + Math.max(1, part.length), 0)
+    let cursor = block.start
+
+    for (const part of parts) {
+      const duration = span * Math.max(1, part.length) / total
+      expanded.push({ start: cursor, end: cursor + duration, text: part })
+      cursor += duration
+    }
+  }
+
+  return expanded
+}
+
+function mergeShortBlocks(blocks, maxChars, minDuration) {
+  let items = blocks.map((block) => ({ ...block }))
+  let changed = true
+
+  while (changed) {
+    changed = false
+    const merged = []
+
+    for (let index = 0; index < items.length; index += 1) {
+      const block = items[index]
+      const duration = block.end - block.start
+
+      if (duration < minDuration && merged.length > 0) {
+        const previous = merged[merged.length - 1]
+        const text = `${previous.text} ${block.text}`.trim()
+        if (text.length <= maxChars) {
+          previous.end = block.end
+          previous.text = text
+          changed = true
+          continue
+        }
+      }
+
+      if (duration < minDuration && index + 1 < items.length) {
+        const next = items[index + 1]
+        const text = `${block.text} ${next.text}`.trim()
+        if (text.length <= maxChars) {
+          merged.push({ start: block.start, end: next.end, text })
+          changed = true
+          index += 1
+          continue
+        }
+      }
+
+      merged.push(block)
+    }
+
+    items = merged
+  }
+
+  return items
+}
+
+function borrowTimeForShortBlocks(blocks, minDuration) {
+  const items = blocks.map((block) => ({ ...block }))
+
+  for (let index = 0; index < items.length; index += 1) {
+    const duration = items[index].end - items[index].start
+    if (duration >= minDuration) continue
+
+    let need = minDuration - duration
+
+    if (index > 0 && need > 0) {
+      const previousDuration = items[index - 1].end - items[index - 1].start
+      const take = Math.min(need, Math.max(0, previousDuration - minDuration))
+      items[index - 1].end -= take
+      items[index].start -= take
+      need -= take
+    }
+
+    if (index + 1 < items.length && need > 0) {
+      const nextDuration = items[index + 1].end - items[index + 1].start
+      const take = Math.min(need, Math.max(0, nextDuration - minDuration))
+      items[index].end += take
+      items[index + 1].start += take
+    }
+  }
+
+  return items
+}
+
+function normalizeBounds(blocks, speechEnd) {
+  const clean = []
+  let previousEnd = 0
+
+  for (const block of blocks) {
+    const start = Math.max(previousEnd, block.start)
+    const end = Math.min(speechEnd, Math.max(start + 0.001, block.end))
+    if (end <= start || start >= speechEnd) continue
+    clean.push({ ...block, start, end })
+    previousEnd = end
+  }
+
+  return clean
+}
+
+async function detectSpeechEnd(audioPath, fallbackEnd) {
+  const startAt = Math.max(0, fallbackEnd - 30)
+  const { stderr } = await run('ffmpeg', [
+    '-hide_banner',
+    '-nostats',
+    '-ss',
+    String(startAt),
+    '-i',
+    audioPath,
+    '-af',
+    'silencedetect=noise=-35dB:d=0.35',
+    '-f',
+    'null',
+    '-',
+  ])
+
+  const matches = [...stderr.matchAll(/silence_start:\s*([0-9.]+)/g)]
+  if (matches.length === 0) return fallbackEnd
+
+  const silenceStart = startAt + Number(matches[matches.length - 1][1])
+  if (!Number.isFinite(silenceStart)) return fallbackEnd
+
+  return Math.min(fallbackEnd, silenceStart)
+}
+
+function writeSrt(blocks) {
+  return `${blocks
+    .map((block, index) => `${index + 1}\n${formatSrtTime(block.start)} --> ${formatSrtTime(block.end)}\n${block.text}`)
+    .join('\n\n')}\n`
+}
+
+function validateBlocks(blocks, maxChars) {
+  let previousEnd = 0
+  let maxLength = 0
+  let minDuration = Number.POSITIVE_INFINITY
+
+  for (const block of blocks) {
+    if (block.start < previousEnd - 0.001) throw new Error('Generated SRT has overlapping timestamps')
+    if (block.text.length > maxChars) throw new Error(`Generated line exceeds ${maxChars} chars: ${block.text}`)
+    previousEnd = block.end
+    maxLength = Math.max(maxLength, block.text.length)
+    minDuration = Math.min(minDuration, block.end - block.start)
+  }
+
+  return {
+    blocks: blocks.length,
+    maxChars: maxLength,
+    minDuration,
+    lastEnd: blocks.length ? blocks[blocks.length - 1].end : 0,
+  }
+}
+
+ipcMain.handle('app:defaults', async () => {
+  const models = await listModels()
+  const smallModel = models.find((model) => path.basename(model).includes('small'))
+
+  return {
+    models,
+    modelPath: smallModel || models[0] || path.join(MODELS_DIR, 'ggml-small.bin'),
+    outputPath: defaultOutputFor('audio.mp3'),
+    prompt: DEFAULT_PROMPT,
+    maxChars: 32,
+    minDuration: 0.6,
+    language: 'pt',
+  }
+})
+
+ipcMain.handle('dialog:audio', async () => {
+  const result = await dialog.showOpenDialog({
+    title: 'Escolha o áudio',
+    properties: ['openFile'],
+    filters: [{ name: 'Audio', extensions: ['mp3', 'wav', 'm4a', 'flac', 'ogg'] }],
+  })
+
+  return result.canceled ? null : result.filePaths[0]
+})
+
+ipcMain.handle('dialog:model', async () => {
+  const result = await dialog.showOpenDialog({
+    title: 'Escolha o modelo Whisper',
+    defaultPath: MODELS_DIR,
+    properties: ['openFile'],
+    filters: [{ name: 'Whisper model', extensions: ['bin'] }],
+  })
+
+  return result.canceled ? null : result.filePaths[0]
+})
+
+ipcMain.handle('dialog:output', async (_event, defaultPath) => {
+  const result = await dialog.showSaveDialog({
+    title: 'Salvar SRT',
+    defaultPath: defaultPath || defaultOutputFor('audio.mp3'),
+    filters: [{ name: 'SRT', extensions: ['srt'] }],
+  })
+
+  return result.canceled ? null : result.filePath
+})
+
+ipcMain.handle('srt:generate', async (_event, options) => {
+  const audioPath = String(options.audioPath || '')
+  const modelPath = String(options.modelPath || '')
+  const outputPath = String(options.outputPath || defaultOutputFor(audioPath))
+  const maxChars = Math.max(12, Math.min(80, Number(options.maxChars) || 32))
+  const minDuration = Math.max(0.2, Math.min(3, Number(options.minDuration) || 0.6))
+  const language = String(options.language || 'pt')
+  const prompt = String(options.prompt || DEFAULT_PROMPT)
+
+  if (!(await fileExists(audioPath))) throw new Error('Audio file not found')
+  if (!(await fileExists(modelPath))) throw new Error('Model file not found')
+
+  const tempBase = path.join(os.tmpdir(), `srt-maker-${Date.now()}`)
+  const tempSrt = `${tempBase}.srt`
+
+  sendProgress('Rodando Whisper...')
+  await run('whisper-cli', [
+    '-m',
+    modelPath,
+    '-f',
+    audioPath,
+    '-l',
+    language,
+    '--prompt',
+    prompt,
+    '-ml',
+    String(maxChars),
+    '-sow',
+    '-osrt',
+    '-np',
+    '-of',
+    tempBase,
+  ], {
+    progress: (text) => {
+      const lines = text.split(/\r?\n/).map((line) => line.trim()).filter(Boolean)
+      const last = lines[lines.length - 1]
+      if (last && last.includes('-->')) sendProgress(last)
+    },
+  })
+
+  sendProgress('Limpando e sincronizando SRT...')
+  const raw = await fs.readFile(tempSrt, 'utf8')
+  let blocks = parseSrt(raw)
+    .map((block) => ({ ...block, text: fixTerms(block.text) }))
+    .filter((block) => block.text && !/\[[^\]]+\]/.test(block.text))
+
+  if (blocks.length === 0) throw new Error('Whisper did not produce subtitle blocks')
+
+  const rawLastEnd = blocks[blocks.length - 1].end
+  const speechEnd = options.trimSilence === false ? rawLastEnd : await detectSpeechEnd(audioPath, rawLastEnd)
+
+  blocks = blocks
+    .map((block) => ({ ...block, end: Math.min(block.end, speechEnd) }))
+    .filter((block) => block.start < speechEnd && block.end > block.start)
+
+  blocks = expandSplitBlocks(blocks, maxChars)
+  blocks = mergeShortBlocks(blocks, maxChars, minDuration)
+  blocks = borrowTimeForShortBlocks(blocks, minDuration)
+  blocks = normalizeBounds(blocks, speechEnd)
+
+  const stats = validateBlocks(blocks, maxChars)
+  await fs.writeFile(outputPath, writeSrt(blocks), 'utf8')
+  await fs.rm(tempSrt, { force: true })
+
+  sendProgress(`Salvo em ${outputPath}`)
+  return { outputPath, stats }
+})
