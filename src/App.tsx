@@ -1,12 +1,25 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import './App.css'
 import type { AppDefaults, GenerateOptions, GenerateResult } from './types'
 
 const audioExtensions = ['.mp3', '.wav', '.m4a', '.flac', '.ogg']
+const multilingualLanguages = [
+  { code: 'pt', label: 'Português' },
+  { code: 'en', label: 'Inglês' },
+  { code: 'es', label: 'Espanhol' },
+  { code: 'fr', label: 'Francês' },
+  { code: 'de', label: 'Alemão' },
+  { code: 'it', label: 'Italiano' },
+]
+const englishOnlyLanguages = [{ code: 'en', label: 'Inglês' }]
 type ElectronFile = File & { path?: string }
 
 function fileName(filePath: string) {
   return filePath.split('/').pop() || filePath
+}
+
+function isEnglishOnlyModel(filePath: string) {
+  return /\.en(?:\.|$)/i.test(fileName(filePath))
 }
 
 function outputNameFor(audioPath: string, defaultOutputPath?: string) {
@@ -41,6 +54,7 @@ function App() {
   const [log, setLog] = useState<string[]>([])
   const [result, setResult] = useState<GenerateResult | null>(null)
   const [error, setError] = useState('')
+  const logRef = useRef<HTMLDivElement | null>(null)
 
   useEffect(() => {
     window.srtMaker.getDefaults().then((data) => {
@@ -62,6 +76,18 @@ function App() {
     () => Boolean(audioPath && modelPath && outputPath && !isGenerating),
     [audioPath, modelPath, outputPath, isGenerating],
   )
+  const languageOptions = isEnglishOnlyModel(modelPath) ? englishOnlyLanguages : multilingualLanguages
+
+  useEffect(() => {
+    if (languageOptions.some((option) => option.code === language)) return
+    setLanguage(languageOptions[0].code)
+  }, [language, languageOptions])
+
+  useEffect(() => {
+    const logElement = logRef.current
+    if (!logElement) return
+    logElement.scrollTop = logElement.scrollHeight
+  }, [log])
 
   async function chooseAudio() {
     const selected = await window.srtMaker.chooseAudio()
@@ -125,9 +151,6 @@ function App() {
           <p className="eyebrow">Local Whisper SRT</p>
           <h1>SRT Maker</h1>
         </div>
-        <button className="primary" type="button" onClick={generate} disabled={!canGenerate}>
-          {isGenerating ? 'Gerando...' : 'Gerar SRT'}
-        </button>
       </header>
 
       <section className="workspace">
@@ -137,7 +160,7 @@ function App() {
             onDragOver={(event) => event.preventDefault()}
             onDrop={handleDrop}
           >
-            <div>
+            <div className="dropzone-copy">
               <span className="label">Áudio</span>
               <strong>{audioPath ? fileName(audioPath) : 'audio.mp3'}</strong>
               <p>{audioPath || 'Arraste o áudio aqui ou selecione um arquivo.'}</p>
@@ -168,7 +191,7 @@ function App() {
             </div>
           </label>
 
-          <div className="grid">
+          <div className="grid settings-grid">
             <label className="field">
               <span>Máx. chars</span>
               <input
@@ -192,7 +215,18 @@ function App() {
             </label>
             <label className="field">
               <span>Idioma</span>
-              <input value={language} onChange={(event) => setLanguage(event.target.value)} />
+              <select value={language} onChange={(event) => setLanguage(event.target.value)}>
+                {languageOptions.map((option) => (
+                  <option key={option.code} value={option.code}>
+                    {option.label} ({option.code})
+                  </option>
+                ))}
+              </select>
+              <small className="helper-text">
+                {isEnglishOnlyModel(modelPath)
+                  ? 'Modelos .en aceitam somente inglês.'
+                  : 'Idiomas aceitos pelos modelos Whisper multilíngues recomendados.'}
+              </small>
             </label>
           </div>
 
@@ -205,14 +239,23 @@ function App() {
             <span>Remover silêncio/música final detectado</span>
           </label>
 
-          <label className="field">
+          <label className="field prompt-field">
             <span>Prompt técnico</span>
+            <small className="helper-text">
+              Palavras que a geração pode confundir, separadas por vírgula.
+            </small>
             <textarea value={prompt} onChange={(event) => setPrompt(event.target.value)} rows={3} />
           </label>
+
+          <div className="actions">
+            <button className="primary" type="button" onClick={generate} disabled={!canGenerate}>
+              {isGenerating ? 'Gerando...' : 'Gerar SRT'}
+            </button>
+          </div>
         </div>
 
         <aside className="panel status">
-          <div>
+          <div className="status-heading">
             <span className="label">Status</span>
             <h2>{isGenerating ? 'Processando' : result ? 'Concluído' : 'Pronto'}</h2>
           </div>
@@ -228,7 +271,7 @@ function App() {
 
           {error && <pre className="error">{error}</pre>}
 
-          <div className="log">
+          <div className="log" ref={logRef}>
             {log.length === 0 ? <p>Aguardando geração.</p> : log.map((line, index) => (
               <p key={`${line}-${index}`}>{line}</p>
             ))}
