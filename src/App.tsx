@@ -195,7 +195,7 @@ function App() {
               <label className="field"><span>Characters per line</span><input type="number" min={12} max={80} value={maxChars} onChange={(event) => setMaxChars(Number(event.target.value))} /></label>
               <label className="field"><span>Minimum duration</span><input type="number" min={0.2} max={3} step={0.1} value={minDuration} onChange={(event) => setMinDuration(Number(event.target.value))} /></label>
               <label className="toggle"><input type="checkbox" checked={trimSilence} onChange={(event) => setTrimSilence(event.target.checked)} /><span>Trim trailing silence and music</span></label>
-              <label className="field prompt"><span>Vocabulary hints</span><textarea rows={2} value={prompt} onChange={(event) => setPrompt(event.target.value)} placeholder="Names or terms Whisper might confuse…" /></label>
+              <label className="field prompt"><span>Vocabulary hints (comma-separated)</span><textarea rows={2} value={prompt} onChange={(event) => setPrompt(event.target.value)} placeholder="e.g. PostgreSQL, OpenAI, product name" /></label>
             </div>
           </details>
 
