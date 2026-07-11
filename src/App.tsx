@@ -141,6 +141,9 @@ function App() {
           <h1>SRT Generator</h1>
           <p>Local subtitles, without the cloud.</p>
         </div>
+        <a className="star-button" href="https://github.com/bragabriel/srt-generator" aria-label="Star SRT Generator on GitHub">
+          <span aria-hidden="true">☆</span> Star this project
+        </a>
       </header>
 
       <section className="workspace">
@@ -214,7 +217,7 @@ function App() {
         </aside>
       </section>
 
-      <footer><span>Open source · MIT</span><a href="https://github.com/bragabriel/srt-generator">GitHub</a><a href="https://github.com/bragabriel/srt-generator">Star this project ↗</a></footer>
+      <footer><span>Open source · MIT</span><a href="https://github.com/bragabriel/srt-generator">GitHub</a></footer>
 
       {detailsOpen && <div className="modal-backdrop" role="presentation" onMouseDown={() => setDetailsOpen(false)}><section className="details-modal" role="dialog" aria-modal="true" aria-labelledby="details-title" onMouseDown={(event) => event.stopPropagation()}><header><div><span className="eyebrow">Diagnostics</span><h2 id="details-title">Technical details</h2></div><button type="button" className="icon-button" onClick={() => setDetailsOpen(false)} aria-label="Close">×</button></header>{error && <pre className="error-message">{error}</pre>}<div className="log" ref={logRef}>{log.length ? log.map((line, index) => <p key={`${line}-${index}`}>{line}</p>) : <p>No activity logged yet.</p>}</div>{systemStatus && <p className="model-location">Models: {systemStatus.modelsDir}</p>}</section></div>}
     </main>
