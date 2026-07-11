@@ -13,6 +13,9 @@ function createWindow() {
     height: 680,
     minWidth: 720,
     minHeight: 600,
+    maxWidth: 1040,
+    maxHeight: 800,
+    fullscreenable: false,
     title: 'SRT Generator',
     backgroundColor: '#eef1f8',
     webPreferences: {
