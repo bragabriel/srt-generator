@@ -173,23 +173,6 @@ function parseSrt(content) {
     })
 }
 
-function fixTerms(text) {
-  const fixes = [
-    [/\bReds\b/g, 'Redis'],
-    [/\breds\b/g, 'Redis'],
-    [/\bRedzy\b/g, 'Redis'],
-    [/\bRedzi\b/g, 'Redis'],
-    [/\bcash\b/g, 'cache'],
-    [/\bCash\b/g, 'Cache'],
-    [/consultar o API/g, 'consultar a API'],
-    [/\bdelitar\b/g, 'deletar'],
-    [/\bmilisegundos\b/g, 'milissegundos'],
-    [/\bpostgres\b/g, 'Postgres'],
-  ]
-
-  return fixes.reduce((result, [pattern, replacement]) => result.replace(pattern, replacement), text)
-}
-
 function splitText(text, maxChars) {
   const words = text.split(/\s+/).filter(Boolean)
   const parts = []
@@ -480,7 +463,6 @@ ipcMain.handle('srt:generate', async (_event, options) => {
     sendProgress('Finalizing subtitles...')
     const raw = await fs.readFile(tempSrt, 'utf8')
     let blocks = parseSrt(raw)
-      .map((block) => ({ ...block, text: fixTerms(block.text) }))
       .filter((block) => block.text && !/\[[^\]]+\]/.test(block.text))
 
     if (blocks.length === 0) throw new Error('Whisper did not produce subtitle blocks')
