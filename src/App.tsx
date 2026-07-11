@@ -77,6 +77,15 @@ function App() {
     [audioPath, modelPath, outputPath, isGenerating],
   )
   const languageOptions = isEnglishOnlyModel(modelPath) ? englishOnlyLanguages : multilingualLanguages
+  const statusTitle = isGenerating
+    ? 'Processando'
+      : result
+        ? 'Concluído'
+        : canGenerate
+          ? 'Pronto para gerar'
+          : audioPath
+            ? 'Aguardando configuração'
+            : 'Aguardando arquivo'
 
   useEffect(() => {
     if (languageOptions.some((option) => option.code === language)) return
@@ -163,7 +172,7 @@ function App() {
             <div className="dropzone-copy">
               <span className="label">Áudio</span>
               <strong>{audioPath ? fileName(audioPath) : 'audio.mp3'}</strong>
-              <p>{audioPath || 'Arraste o áudio aqui ou selecione um arquivo.'}</p>
+              <p>{audioPath || 'Arraste um arquivo .mp3, .wav ou selecione manualmente.'}</p>
             </div>
             <button type="button" onClick={chooseAudio}>Escolher</button>
           </div>
@@ -191,29 +200,31 @@ function App() {
             </div>
           </label>
 
-          <div className="grid settings-grid">
-            <label className="field">
-              <span>Máx. chars</span>
-              <input
-                type="number"
-                min={12}
-                max={80}
-                value={maxChars}
-                onChange={(event) => setMaxChars(Number(event.target.value))}
-              />
-            </label>
-            <label className="field">
-              <span>Mín. segundos</span>
-              <input
-                type="number"
-                min={0.2}
-                max={3}
-                step={0.1}
-                value={minDuration}
-                onChange={(event) => setMinDuration(Number(event.target.value))}
-              />
-            </label>
-            <label className="field">
+          <div className="settings-grid">
+            <div className="settings-numeric-row">
+              <label className="field">
+                <span>Máx. chars</span>
+                <input
+                  type="number"
+                  min={12}
+                  max={80}
+                  value={maxChars}
+                  onChange={(event) => setMaxChars(Number(event.target.value))}
+                />
+              </label>
+              <label className="field">
+                <span>Mín. segundos</span>
+                <input
+                  type="number"
+                  min={0.2}
+                  max={3}
+                  step={0.1}
+                  value={minDuration}
+                  onChange={(event) => setMinDuration(Number(event.target.value))}
+                />
+              </label>
+            </div>
+            <label className="field language-field">
               <span>Idioma</span>
               <select value={language} onChange={(event) => setLanguage(event.target.value)}>
                 {languageOptions.map((option) => (
@@ -257,7 +268,7 @@ function App() {
         <aside className="panel status">
           <div className="status-heading">
             <span className="label">Status</span>
-            <h2>{isGenerating ? 'Processando' : result ? 'Concluído' : 'Pronto'}</h2>
+            <h2>{statusTitle}</h2>
           </div>
 
           {result && (
@@ -272,7 +283,12 @@ function App() {
           {error && <pre className="error">{error}</pre>}
 
           <div className="log" ref={logRef}>
-            {log.length === 0 ? <p>Aguardando geração.</p> : log.map((line, index) => (
+            {log.length === 0 ? (
+              <>
+                <p>Aguardando geração...</p>
+                <p className="log-muted">Os logs aparecerão aqui quando o processo começar.</p>
+              </>
+            ) : log.map((line, index) => (
               <p key={`${line}-${index}`}>{line}</p>
             ))}
           </div>
