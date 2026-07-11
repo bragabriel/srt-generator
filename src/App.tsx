@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import './App.css'
 import type { AppDefaults, GenerateOptions, GenerateResult, SystemStatus } from './types'
+import { fileName, formatDuration, isEnglishOnlyModel, isSupportedAudio, outputNameFor } from './utils'
 
-const audioExtensions = ['.mp3', '.wav', '.m4a', '.flac', '.ogg']
 const languages = [
   { code: 'pt', label: 'Portuguese' },
   { code: 'en', label: 'English' },
@@ -12,32 +12,6 @@ const languages = [
   { code: 'it', label: 'Italian' },
 ]
 type ElectronFile = File & { path?: string }
-
-function fileName(filePath: string) {
-  return filePath.split(/[\\/]/).pop() || filePath
-}
-
-function isEnglishOnlyModel(filePath: string) {
-  return /\.en(?:\.|$)/i.test(fileName(filePath))
-}
-
-function outputNameFor(audioPath: string, defaultOutputPath?: string) {
-  const name = fileName(audioPath || 'audio.mp3').replace(/\.[^.]+$/, '')
-  const separator = audioPath.includes('\\') ? '\\' : '/'
-  const audioDir = audioPath.slice(0, Math.max(0, audioPath.lastIndexOf(separator)))
-  const defaultDir = defaultOutputPath?.slice(0, Math.max(0, defaultOutputPath.lastIndexOf(separator)))
-  const outputDir = defaultDir || audioDir || '.'
-  const now = new Date()
-  const pad = (value: number) => String(value).padStart(2, '0')
-  const stamp = `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}-${pad(now.getHours())}${pad(now.getMinutes())}`
-  return `${outputDir}${separator}${name}-${stamp}.srt`
-}
-
-function formatDuration(seconds: number) {
-  const minutes = Math.floor(seconds / 60)
-  const remaining = Math.round(seconds % 60)
-  return `${minutes}:${String(remaining).padStart(2, '0')}`
-}
 
 function App() {
   const [theme, setTheme] = useState(() => localStorage.getItem('theme') || 'system')
@@ -152,7 +126,7 @@ function App() {
     event.preventDefault()
     setDragging(false)
     const droppedPath = (event.dataTransfer.files[0] as ElectronFile | undefined)?.path
-    if (droppedPath && audioExtensions.some((extension) => droppedPath.toLowerCase().endsWith(extension))) selectAudio(droppedPath)
+    if (droppedPath && isSupportedAudio(droppedPath)) selectAudio(droppedPath)
   }
 
   return (
