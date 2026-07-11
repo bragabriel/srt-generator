@@ -9,7 +9,9 @@ A small desktop app that turns audio into clean `.srt` subtitles with [whisper.c
 
 ![SRT Generator running on macOS](docs/srt-generator.png)
 
-[Watch the 50-second demo](docs/srt-generator-demo.mp4)
+### Demo
+
+![SRT Generator demo](docs/srt-generator-demo.gif)
 
 ## What it does
 
