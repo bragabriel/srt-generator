@@ -2,11 +2,19 @@
 
 A small desktop app that turns audio into clean `.srt` subtitles with [whisper.cpp](https://github.com/ggml-org/whisper.cpp). Everything runs locally on your Mac — no uploads, accounts, or telemetry.
 
+## What it does
+
+- Accepts MP3, WAV, M4A, FLAC, and OGG audio
+- Generates and cleans timed SRT captions locally
+- Supports multilingual and English-only Whisper models
+- Lets you control language, line length, timing, vocabulary hints, and trailing silence
+- Includes light and dark themes
+
 ## Requirements
 
 - macOS (Apple Silicon is the first packaged target)
 - [Homebrew](https://brew.sh/)
-- Node.js 20 or newer, only when running from source
+- Node.js 22.12 or newer, only when running from source
 
 ## Quick start
 
@@ -75,6 +83,7 @@ The app expects `ffmpeg`, `whisper-cli`, and at least one model to be installed 
 npm run dev       # Vite + Electron development mode
 npm run build     # Type-check and build the renderer
 npm run lint      # Static checks
+npm test          # Unit tests
 npm run dist:mac  # Build an Apple Silicon DMG
 ```
 
@@ -92,7 +101,7 @@ Check that the model ends in `.bin` and exists in the expected folder:
 ls -lh ~/.srt-generator/models
 ```
 
-You can also use **Change** in the app to select a model manually.
+You can also use **Browse…** in the app to select a model manually.
 
 ### Generation is slow
 
