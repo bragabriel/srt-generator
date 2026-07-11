@@ -1,21 +1,20 @@
-const { app, BrowserWindow, dialog, ipcMain } = require('electron')
+const { app, BrowserWindow, dialog, ipcMain, shell } = require('electron')
 const { spawn } = require('node:child_process')
 const fs = require('node:fs/promises')
 const os = require('node:os')
 const path = require('node:path')
 
-const MODELS_DIR = process.env.SRT_MAKER_MODELS_DIR || path.join(os.homedir(), '.rapid-edit', 'models')
-const DEFAULT_PROMPT =
-  'Redis, cache, PostgreSQL, API, request, hit, miss, banco relacional, memória RAM'
+const MODELS_DIR = process.env.SRT_GENERATOR_MODELS_DIR || path.join(os.homedir(), '.srt-generator', 'models')
+const DEFAULT_PROMPT = ''
 
 function createWindow() {
   const win = new BrowserWindow({
-    width: 1040,
-    height: 780,
-    minWidth: 880,
-    minHeight: 680,
-    title: 'SRT Maker',
-    backgroundColor: '#f7f8fa',
+    width: 860,
+    height: 680,
+    minWidth: 720,
+    minHeight: 600,
+    title: 'SRT Generator',
+    backgroundColor: '#eef1f8',
     webPreferences: {
       preload: path.join(__dirname, 'preload.cjs'),
       contextIsolation: true,
@@ -94,6 +93,15 @@ async function listModels() {
       .map((name) => path.join(MODELS_DIR, name))
   } catch {
     return []
+  }
+}
+
+async function commandExists(command) {
+  try {
+    await run(command, ['--help'])
+    return true
+  } catch (error) {
+    return error && error.code !== 'ENOENT'
   }
 }
 
@@ -355,6 +363,7 @@ function validateBlocks(blocks, maxChars) {
 }
 
 ipcMain.handle('app:defaults', async () => {
+  await fs.mkdir(MODELS_DIR, { recursive: true })
   const models = await listModels()
   const smallModel = models.find((model) => path.basename(model).includes('small'))
 
@@ -367,6 +376,21 @@ ipcMain.handle('app:defaults', async () => {
     minDuration: 0.6,
     language: 'pt',
   }
+})
+
+ipcMain.handle('app:system-status', async () => {
+  await fs.mkdir(MODELS_DIR, { recursive: true })
+  const [whisper, ffmpeg, models] = await Promise.all([
+    commandExists('whisper-cli'),
+    commandExists('ffmpeg'),
+    listModels(),
+  ])
+
+  return { whisper, ffmpeg, models: models.length, modelsDir: MODELS_DIR }
+})
+
+ipcMain.handle('file:show-in-folder', (_event, filePath) => {
+  if (typeof filePath === 'string' && filePath) shell.showItemInFolder(filePath)
 })
 
 ipcMain.handle('dialog:audio', async () => {
@@ -416,54 +440,45 @@ ipcMain.handle('srt:generate', async (_event, options) => {
   const tempSrt = `${tempBase}.srt`
 
   sendProgress('Rodando Whisper...')
-  await run('whisper-cli', [
-    '-m',
-    modelPath,
-    '-f',
-    audioPath,
-    '-l',
-    language,
-    '--prompt',
-    prompt,
-    '-ml',
-    String(maxChars),
-    '-sow',
-    '-osrt',
-    '-np',
-    '-of',
-    tempBase,
-  ], {
-    progress: (text) => {
-      const lines = text.split(/\r?\n/).map((line) => line.trim()).filter(Boolean)
-      const last = lines[lines.length - 1]
-      if (last && last.includes('-->')) sendProgress(last)
-    },
-  })
+  try {
+    const whisperArgs = ['-m', modelPath, '-f', audioPath, '-l', language]
+    if (prompt) whisperArgs.push('--prompt', prompt)
+    whisperArgs.push('-ml', String(maxChars), '-sow', '-osrt', '-np', '-of', tempBase)
 
-  sendProgress('Limpando e sincronizando SRT...')
-  const raw = await fs.readFile(tempSrt, 'utf8')
-  let blocks = parseSrt(raw)
-    .map((block) => ({ ...block, text: fixTerms(block.text) }))
-    .filter((block) => block.text && !/\[[^\]]+\]/.test(block.text))
+    await run('whisper-cli', whisperArgs, {
+      progress: (text) => {
+        const lines = text.split(/\r?\n/).map((line) => line.trim()).filter(Boolean)
+        const last = lines[lines.length - 1]
+        if (last && last.includes('-->')) sendProgress(last)
+      },
+    })
 
-  if (blocks.length === 0) throw new Error('Whisper did not produce subtitle blocks')
+    sendProgress('Finalizing subtitles...')
+    const raw = await fs.readFile(tempSrt, 'utf8')
+    let blocks = parseSrt(raw)
+      .map((block) => ({ ...block, text: fixTerms(block.text) }))
+      .filter((block) => block.text && !/\[[^\]]+\]/.test(block.text))
 
-  const rawLastEnd = blocks[blocks.length - 1].end
-  const speechEnd = options.trimSilence === false ? rawLastEnd : await detectSpeechEnd(audioPath, rawLastEnd)
+    if (blocks.length === 0) throw new Error('Whisper did not produce subtitle blocks')
 
-  blocks = blocks
-    .map((block) => ({ ...block, end: Math.min(block.end, speechEnd) }))
-    .filter((block) => block.start < speechEnd && block.end > block.start)
+    const rawLastEnd = blocks[blocks.length - 1].end
+    const speechEnd = options.trimSilence === false ? rawLastEnd : await detectSpeechEnd(audioPath, rawLastEnd)
 
-  blocks = expandSplitBlocks(blocks, maxChars)
-  blocks = mergeShortBlocks(blocks, maxChars, minDuration)
-  blocks = borrowTimeForShortBlocks(blocks, minDuration)
-  blocks = normalizeBounds(blocks, speechEnd)
+    blocks = blocks
+      .map((block) => ({ ...block, end: Math.min(block.end, speechEnd) }))
+      .filter((block) => block.start < speechEnd && block.end > block.start)
 
-  const stats = validateBlocks(blocks, maxChars)
-  await fs.writeFile(outputPath, writeSrt(blocks), 'utf8')
-  await fs.rm(tempSrt, { force: true })
+    blocks = expandSplitBlocks(blocks, maxChars)
+    blocks = mergeShortBlocks(blocks, maxChars, minDuration)
+    blocks = borrowTimeForShortBlocks(blocks, minDuration)
+    blocks = normalizeBounds(blocks, speechEnd)
 
-  sendProgress(`Salvo em ${outputPath}`)
-  return { outputPath, stats }
+    const stats = validateBlocks(blocks, maxChars)
+    await fs.writeFile(outputPath, writeSrt(blocks), 'utf8')
+
+    sendProgress(`Saved to ${outputPath}`)
+    return { outputPath, stats, preview: blocks.slice(0, 3).map((block) => block.text) }
+  } finally {
+    await fs.rm(tempSrt, { force: true })
+  }
 })

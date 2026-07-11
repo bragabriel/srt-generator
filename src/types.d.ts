@@ -19,8 +19,16 @@ export type AppDefaults = {
   language: string
 }
 
+export type SystemStatus = {
+  whisper: boolean
+  ffmpeg: boolean
+  models: number
+  modelsDir: string
+}
+
 export type GenerateResult = {
   outputPath: string
+  preview: string[]
   stats: {
     blocks: number
     maxChars: number
@@ -36,7 +44,9 @@ declare global {
       chooseModel: () => Promise<string | null>
       chooseOutput: (defaultPath?: string) => Promise<string | null>
       getDefaults: () => Promise<AppDefaults>
+      getSystemStatus: () => Promise<SystemStatus>
       generate: (options: GenerateOptions) => Promise<GenerateResult>
+      showInFolder: (filePath: string) => Promise<void>
       onProgress: (callback: (message: string) => void) => () => void
     }
   }
