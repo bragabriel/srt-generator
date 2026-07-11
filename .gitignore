@@ -15,6 +15,7 @@ out
 build
 .vite
 .tokensave
+.serena
 AGENTS.md
 *.local
 
