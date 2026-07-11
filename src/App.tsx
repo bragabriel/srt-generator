@@ -88,8 +88,19 @@ function App() {
   }, [])
 
   const languageOptions = isEnglishOnlyModel(modelPath) ? languages.filter(({ code }) => code === 'en') : languages
-  const setupReady = Boolean(systemStatus?.whisper && systemStatus.ffmpeg && systemStatus.models)
+  const setupReady = Boolean(systemStatus?.whisper && systemStatus.ffmpeg && modelPath)
   const canGenerate = Boolean(audioPath && modelPath && outputPath && setupReady && !isGenerating)
+  const generateDisabledReason = !audioPath
+    ? 'Choose an audio file first.'
+    : !modelPath
+      ? 'Install or choose a Whisper model.'
+      : !outputPath
+        ? 'Choose where to save the subtitle.'
+        : !systemStatus?.whisper
+          ? 'Install whisper-cli to generate subtitles.'
+          : !systemStatus.ffmpeg
+            ? 'Install ffmpeg to process audio.'
+            : ''
 
   useEffect(() => {
     if (!languageOptions.some((option) => option.code === language)) setLanguage(languageOptions[0].code)
@@ -218,9 +229,11 @@ function App() {
             </div>
           </details>
 
-          <button className="primary" type="button" onClick={generate} disabled={!canGenerate}>
-            {isGenerating ? <><span className="spinner" /> Generating subtitle…</> : 'Generate SRT'}
-          </button>
+          <div className="generate-action" data-tooltip={!canGenerate && !isGenerating ? generateDisabledReason : undefined}>
+            <button className="primary" type="button" onClick={generate} disabled={!canGenerate}>
+              {isGenerating ? <><span className="spinner" /> Generating subtitle…</> : 'Generate SRT'}
+            </button>
+          </div>
         </div>
 
         <aside className="glass-panel context-panel">
@@ -237,7 +250,7 @@ function App() {
           ) : isGenerating ? (
             <div className="context-content processing-state"><div className="progress-orbit"><span /></div><span className="eyebrow">Processing locally</span><h2>Listening to your audio</h2><p className="context-copy">This can take a few minutes. Your audio never leaves this Mac.</p><div className="activity-line">{log.at(-1) || 'Preparing…'}</div><button type="button" className="text-button" onClick={() => setDetailsOpen(true)}>View details</button></div>
           ) : (
-            <div className="context-content welcome-state"><div className="waveform" aria-hidden="true">{[12, 24, 17, 34, 22, 42, 28, 16, 31, 19, 26].map((height, index) => <i key={index} style={{ height }} />)}</div><span className="eyebrow">Private by design</span><h2>Studio-ready subtitles, made locally.</h2><p className="context-copy">Drop in your audio and turn it into a clean, timed SRT file with whisper.cpp.</p><div className="checklist"><SetupItem label="whisper-cli" ready={systemStatus?.whisper} /><SetupItem label="ffmpeg" ready={systemStatus?.ffmpeg} /><SetupItem label={systemStatus?.models ? `${systemStatus.models} model${systemStatus.models > 1 ? 's' : ''} installed` : 'Whisper model'} ready={Boolean(systemStatus?.models)} /></div>{systemStatus && !setupReady && <a className="setup-link" href="https://github.com/bragabriel/srt-generator#quick-start">Open setup guide ↗</a>}</div>
+            <div className="context-content welcome-state"><div className="waveform" aria-hidden="true">{[12, 24, 17, 34, 22, 42, 28, 16, 31, 19, 26].map((height, index) => <i key={index} style={{ height }} />)}</div><span className="eyebrow">Private by design</span><h2>Studio-ready subtitles, made locally.</h2><p className="context-copy">Drop in your audio and turn it into a clean, timed SRT file with whisper.cpp.</p><div className="checklist"><SetupItem label="whisper-cli" ready={systemStatus?.whisper} /><SetupItem label="ffmpeg" ready={systemStatus?.ffmpeg} /><SetupItem label={modelPath ? fileName(modelPath) : 'Whisper model'} ready={Boolean(modelPath)} /></div>{systemStatus && !setupReady && <a className="setup-link" href="https://github.com/bragabriel/srt-generator#quick-start">Open setup guide ↗</a>}</div>
           )}
           {(log.length > 0 || error) && !isGenerating && <button type="button" className="details-link" onClick={() => setDetailsOpen(true)}>View technical details</button>}
         </aside>

@@ -384,7 +384,7 @@ ipcMain.handle('app:defaults', async () => {
 
   return {
     models,
-    modelPath: smallModel || models[0] || path.join(MODELS_DIR, 'ggml-small.bin'),
+    modelPath: smallModel || models[0] || '',
     outputPath: defaultOutputFor('audio.mp3'),
     prompt: DEFAULT_PROMPT,
     maxChars: 32,
