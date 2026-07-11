@@ -33,6 +33,7 @@ AGENTS.md
 
 # Raw documentation recordings
 docs/result-srt-gen.mp4
+docs/design.md
 
 # Secrets and local config
 .env
