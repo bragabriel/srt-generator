@@ -40,6 +40,7 @@ function formatDuration(seconds: number) {
 }
 
 function App() {
+  const [theme, setTheme] = useState(() => localStorage.getItem('theme') || 'system')
   const [defaults, setDefaults] = useState<AppDefaults | null>(null)
   const [systemStatus, setSystemStatus] = useState<SystemStatus | null>(null)
   const [audioPath, setAudioPath] = useState('')
@@ -58,6 +59,16 @@ function App() {
   const [result, setResult] = useState<GenerateResult | null>(null)
   const [error, setError] = useState('')
   const logRef = useRef<HTMLDivElement | null>(null)
+
+  useEffect(() => {
+    if (theme === 'system') {
+      document.documentElement.removeAttribute('data-theme')
+      localStorage.removeItem('theme')
+    } else {
+      document.documentElement.dataset.theme = theme
+      localStorage.setItem('theme', theme)
+    }
+  }, [theme])
 
   useEffect(() => {
     Promise.all([window.srtMaker.getDefaults(), window.srtMaker.getSystemStatus()]).then(([data, status]) => {
@@ -141,6 +152,14 @@ function App() {
           <h1>SRT Generator</h1>
           <p>Local subtitles, without the cloud.</p>
         </div>
+        <label className="theme-control">
+          <span aria-hidden="true">◐</span>
+          <select value={theme} onChange={(event) => setTheme(event.target.value)} aria-label="Color theme">
+            <option value="system">System</option>
+            <option value="light">Light</option>
+            <option value="dark">Dark</option>
+          </select>
+        </label>
         <a className="star-button" href="https://github.com/bragabriel/srt-generator" aria-label="Star SRT Generator on GitHub">
           <span aria-hidden="true">☆</span> Star this project
         </a>
