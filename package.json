@@ -1,6 +1,12 @@
 {
   "name": "srt-generator",
   "description": "Local Electron app for generating SRT subtitles with whisper.cpp.",
+  "author": "Gabriel Braga",
+  "homepage": "https://github.com/bragabriel/srt-generator",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/bragabriel/srt-generator.git"
+  },
   "private": false,
   "version": "0.0.0",
   "license": "MIT",
@@ -9,6 +15,7 @@
   "scripts": {
     "dev": "concurrently -k \"vite --host 127.0.0.1\" \"wait-on http://127.0.0.1:5173 && VITE_DEV_SERVER_URL=http://127.0.0.1:5173 electron .\"",
     "build": "tsc -b && vite build",
+    "dist:mac": "npm run build && electron-builder --mac dmg --arm64",
     "electron": "electron .",
     "lint": "oxlint",
     "preview": "vite preview"
@@ -24,9 +31,31 @@
     "@vitejs/plugin-react": "^6.0.3",
     "concurrently": "^10.0.3",
     "electron": "^43.1.0",
+    "electron-builder": "^26.15.3",
     "oxlint": "^1.71.0",
     "typescript": "~6.0.2",
     "vite": "^8.1.1",
     "wait-on": "^9.0.10"
+  },
+  "build": {
+    "appId": "com.bragabriel.srt-generator",
+    "productName": "SRT Generator",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "electron/**/*",
+      "package.json"
+    ],
+    "mac": {
+      "category": "public.app-category.productivity",
+      "icon": "build/icon.png",
+      "target": ["dmg"]
+    },
+    "dmg": {
+      "title": "SRT Generator ${version}",
+      "artifactName": "SRT-Generator-${version}-${arch}.${ext}"
+    }
   }
 }

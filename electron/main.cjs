@@ -22,6 +22,16 @@ function createWindow() {
     },
   })
 
+  win.webContents.setWindowOpenHandler(({ url }) => {
+    if (/^https?:\/\//.test(url)) shell.openExternal(url)
+    return { action: 'deny' }
+  })
+  win.webContents.on('will-navigate', (event, url) => {
+    if (url === win.webContents.getURL()) return
+    event.preventDefault()
+    if (/^https?:\/\//.test(url)) shell.openExternal(url)
+  })
+
   if (process.env.VITE_DEV_SERVER_URL) {
     win.loadURL(process.env.VITE_DEV_SERVER_URL)
     return
@@ -96,13 +106,18 @@ async function listModels() {
   }
 }
 
-async function commandExists(command) {
-  try {
-    await run(command, ['--help'])
-    return true
-  } catch (error) {
-    return error && error.code !== 'ENOENT'
+async function resolveCommand(command) {
+  const candidates = [
+    ...String(process.env.PATH || '').split(path.delimiter).filter(Boolean).map((directory) => path.join(directory, command)),
+    path.join('/opt/homebrew/bin', command),
+    path.join('/usr/local/bin', command),
+  ]
+
+  for (const candidate of [...new Set(candidates)]) {
+    if (await fileExists(candidate)) return candidate
   }
+
+  return null
 }
 
 function timestampForFile() {
@@ -310,9 +325,9 @@ function normalizeBounds(blocks, speechEnd) {
   return clean
 }
 
-async function detectSpeechEnd(audioPath, fallbackEnd) {
+async function detectSpeechEnd(ffmpegCommand, audioPath, fallbackEnd) {
   const startAt = Math.max(0, fallbackEnd - 30)
-  const { stderr } = await run('ffmpeg', [
+  const { stderr } = await run(ffmpegCommand, [
     '-hide_banner',
     '-nostats',
     '-ss',
@@ -380,13 +395,13 @@ ipcMain.handle('app:defaults', async () => {
 
 ipcMain.handle('app:system-status', async () => {
   await fs.mkdir(MODELS_DIR, { recursive: true })
-  const [whisper, ffmpeg, models] = await Promise.all([
-    commandExists('whisper-cli'),
-    commandExists('ffmpeg'),
+  const [whisperPath, ffmpegPath, models] = await Promise.all([
+    resolveCommand('whisper-cli'),
+    resolveCommand('ffmpeg'),
     listModels(),
   ])
 
-  return { whisper, ffmpeg, models: models.length, modelsDir: MODELS_DIR }
+  return { whisper: Boolean(whisperPath), ffmpeg: Boolean(ffmpegPath), models: models.length, modelsDir: MODELS_DIR }
 })
 
 ipcMain.handle('file:show-in-folder', (_event, filePath) => {
@@ -435,6 +450,12 @@ ipcMain.handle('srt:generate', async (_event, options) => {
 
   if (!(await fileExists(audioPath))) throw new Error('Audio file not found')
   if (!(await fileExists(modelPath))) throw new Error('Model file not found')
+  const [whisperCommand, ffmpegCommand] = await Promise.all([
+    resolveCommand('whisper-cli'),
+    resolveCommand('ffmpeg'),
+  ])
+  if (!whisperCommand) throw new Error('whisper-cli was not found. Install it with: brew install whisper-cpp')
+  if (!ffmpegCommand) throw new Error('ffmpeg was not found. Install it with: brew install ffmpeg')
 
   const tempBase = path.join(os.tmpdir(), `srt-maker-${Date.now()}`)
   const tempSrt = `${tempBase}.srt`
@@ -445,7 +466,7 @@ ipcMain.handle('srt:generate', async (_event, options) => {
     if (prompt) whisperArgs.push('--prompt', prompt)
     whisperArgs.push('-ml', String(maxChars), '-sow', '-osrt', '-np', '-of', tempBase)
 
-    await run('whisper-cli', whisperArgs, {
+    await run(whisperCommand, whisperArgs, {
       progress: (text) => {
         const lines = text.split(/\r?\n/).map((line) => line.trim()).filter(Boolean)
         const last = lines[lines.length - 1]
@@ -462,7 +483,7 @@ ipcMain.handle('srt:generate', async (_event, options) => {
     if (blocks.length === 0) throw new Error('Whisper did not produce subtitle blocks')
 
     const rawLastEnd = blocks[blocks.length - 1].end
-    const speechEnd = options.trimSilence === false ? rawLastEnd : await detectSpeechEnd(audioPath, rawLastEnd)
+    const speechEnd = options.trimSilence === false ? rawLastEnd : await detectSpeechEnd(ffmpegCommand, audioPath, rawLastEnd)
 
     blocks = blocks
       .map((block) => ({ ...block, end: Math.min(block.end, speechEnd) }))

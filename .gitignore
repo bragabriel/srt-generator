@@ -12,7 +12,9 @@ dist
 dist-ssr
 release
 out
-build
+build/*
+!build/icon.svg
+!build/icon.png
 .vite
 .tokensave
 .serena
