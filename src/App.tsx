@@ -155,13 +155,6 @@ function App() {
 
   return (
     <main className="shell">
-      <header className="topbar">
-        <div>
-          <p className="eyebrow">Local Whisper SRT</p>
-          <h1>SRT Maker</h1>
-        </div>
-      </header>
-
       <section className="workspace">
         <div className="panel">
           <div
@@ -252,10 +245,12 @@ function App() {
 
           <label className="field prompt-field">
             <span>Prompt técnico</span>
-            <small className="helper-text">
-              Palavras que a geração pode confundir, separadas por vírgula.
-            </small>
-            <textarea value={prompt} onChange={(event) => setPrompt(event.target.value)} rows={3} />
+            <textarea
+              value={prompt}
+              onChange={(event) => setPrompt(event.target.value)}
+              placeholder="Palavras que a geração pode confundir, separadas por vírgula."
+              rows={2}
+            />
           </label>
 
           <div className="actions">
