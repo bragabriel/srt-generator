@@ -177,8 +177,15 @@ function App() {
           </label>
 
           <div className="model-summary">
-            <div><span className="eyebrow">Model</span><strong>{fileName(modelPath) || 'No model installed'}</strong></div>
-            <button type="button" className="text-button" onClick={chooseModel}>Change</button>
+            <label>
+              <span className="eyebrow">Model</span>
+              <select value={modelPath} onChange={(event) => setModelPath(event.target.value)} aria-label="Whisper model">
+                {defaults?.models.map((model) => <option key={model} value={model}>{fileName(model)}</option>)}
+                {modelPath && !defaults?.models.includes(modelPath) && <option value={modelPath}>{fileName(modelPath)}</option>}
+                {!modelPath && <option value="">No model installed</option>}
+              </select>
+            </label>
+            <button type="button" className="model-browse" onClick={chooseModel}>Browse…</button>
           </div>
 
           <details className="advanced" open={advancedOpen} onToggle={(event) => setAdvancedOpen(event.currentTarget.open)}>

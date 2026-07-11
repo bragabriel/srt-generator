@@ -44,8 +44,11 @@ input,select,textarea { width:100%; min-width:0; min-height:34px; border:1px sol
 textarea { resize:vertical; }
 select { appearance:none; background-image:linear-gradient(45deg,transparent 50%,var(--muted) 50%),linear-gradient(135deg,var(--muted) 50%,transparent 50%); background-position:calc(100% - 13px) 50%,calc(100% - 9px) 50%; background-size:4px 4px; background-repeat:no-repeat; }
 .icon-button { width:34px; height:34px; border-radius:9px; font-weight:750; }
-.model-summary { display:flex; align-items:center; justify-content:space-between; margin:12px 0; padding:10px 11px; border:1px solid var(--line); border-radius:11px; background:rgba(255,255,255,.28); }
-.model-summary strong { display:block; margin-top:3px; font-size:11px; }
+.model-summary { display:grid; grid-template-columns:minmax(0,1fr) auto; align-items:center; gap:8px; margin:12px 0; padding:8px 10px; border:1px solid var(--line); border-radius:11px; background:rgba(255,255,255,.28); }
+.model-summary label { min-width:0; display:grid; align-content:center; gap:1px; }
+.model-summary select { min-height:20px; height:20px; margin-left:-4px; padding:0 22px 0 4px; border:0; border-radius:5px; background-color:transparent; font-size:11px; font-weight:700; }
+.model-summary select:focus-visible { outline-width:2px; }
+.model-browse { align-self:center; padding:5px 3px; color:var(--accent); background:transparent; font-size:10px; font-weight:750; }
 .text-button { padding:4px; color:var(--accent); background:transparent; font-size:10px; font-weight:750; }
 .advanced { border-top:1px solid var(--line); border-bottom:1px solid var(--line); }
 .advanced summary { display:flex; justify-content:space-between; padding:10px 1px; cursor:pointer; list-style:none; font-size:11px; font-weight:700; }
