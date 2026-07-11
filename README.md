@@ -1,6 +1,9 @@
 # SRT Generator
 
-A small desktop app that turns audio into clean `.srt` subtitles with [whisper.cpp](https://github.com/ggml-org/whisper.cpp). Everything runs locally on your Mac — no uploads, accounts, or telemetry.
+A small desktop app that turns audio into clean `.srt` subtitles with [whisper.cpp](https://github.com/ggml-org/whisper.cpp).
+
+> **100% local transcription. Your audio never leaves your Mac.**  
+> No uploads, accounts, subscriptions, or telemetry.
 
 ![SRT Generator running on macOS](docs/srt-generator.png)
 
